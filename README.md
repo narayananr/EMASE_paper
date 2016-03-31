@@ -1,6 +1,7 @@
 # EMASE_paper
 
 # Shell Script to compare EMASE to other methods with simulated data
+Load samtools and emase
 ```
 #!/bin/bash
 #PBS -l nodes=1:ppn=1,walltime=23:00:00
@@ -10,7 +11,9 @@ module load samtools
 module load Anaconda
 #source activate emase.0.9.8
 source activate emase
-### Define variables
+```
+Define variables for the necessary files
+```
 TID=/data/kbchoi/data/mm10/R75-REL1410/C57BL6J/emase.transcriptome.info
 g2tID=/data/kbchoi/data/mm10/R75-REL1410/C57BL6J/emase.gene2transcripts.tsv
 lenFile=/data/kbchoi/data/mm10/R75-REL1410/NxP/emase.pooled.transcriptome.info
