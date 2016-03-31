@@ -36,8 +36,7 @@ Run emase to quantify expression
 ```
 run-emase -i ${Combined_HDF5} -g ${g2tID} -L ${lenFile} -M 2 -r 68 -m 1 -o ${OPATH}/${Combined_ONAME}_m2
 ```
+```
 #rsem-calculate-expression -p 1 --no-bam-output --fragment-length-mean 280 --fragment-length-sd 50 --time --bam ${ALNFILE} ${INDEXBASE} ${OPATH}/${ONAME}_rsem
 simulate-reads -m 2 -R /data/kbchoi/data/mm10/R75-REL1410/C57BL6J/ -H /data/kbchoi/data/mm10/R75-REL1410/NxP/ -p ${OPATH}/${Combined_ONAME}_m2.isoforms.effective_read_counts -X 12 -r 68 -e 0.2 -L -o emase_m2
-
-~
-~
+```
