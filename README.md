@@ -1,19 +1,7 @@
 # EMASE_paper
 
 # Shell Script to compare EMASE to other methods with simulated data
-
-################################################################################################
-# single shell script to go from real data's bam file simulated results
-# Step1: estimate expression by emase M2 (and RSEM)
-# Step2: use the estimated expression to simulate reads
-# Step3: align the simulated reads
-# Step4: estimate expression by EMASE M2 from the aligned simulated reads
-# Step5: estimate expression by Kallisto from the aligned simulated reads
-# Step6: estimate expression by RSEM from the aligned simulated reads
-# Step7: align the simulated reads to B6 genome  by TopHat2
-# Step8:
-#
-################################################################################################
+```
 #!/bin/bash
 #PBS -l nodes=1:ppn=1,walltime=23:00:00
 cd $PBS_O_WORKDIR
@@ -22,7 +10,6 @@ module load samtools
 module load Anaconda
 #source activate emase.0.9.8
 source activate emase
-```
 ### Define variables
 TID=/data/kbchoi/data/mm10/R75-REL1410/C57BL6J/emase.transcriptome.info
 g2tID=/data/kbchoi/data/mm10/R75-REL1410/C57BL6J/emase.gene2transcripts.tsv
