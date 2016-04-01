@@ -1,12 +1,6 @@
 
 
-EMASE: Expectation-Maximization algorithm for Allele Specific Expression 
-------------------------------------------------------------------------
-Narayanan Raghupathy, Kwangbom Choi, Steve Munger, and Gary Churchill
-
-Shell Script to compare EMASE to other methods with simulated data
-~~~~~~~~~~~~~~
-# Shell Script to compare EMASE to other methods with simulated data
+#Shell Script to compare EMASE to other methods with simulated data
 Load samtools and emase
 ```bash
 #!/bin/bash
