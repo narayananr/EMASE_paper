@@ -1,0 +1,1073 @@
+---
+title: "Reproducing figures in EMASE Manscript"
+output: pdf_document
+---
+
+This R markdown document reproduces all the figures in the EMASE manuscript.
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.width=10, fig.height=8, 
+                      warning=FALSE, message=FALSE)
+```
+
+### Allele-specific expression analysis on NODxPWD reciprocal F1 Mice
+
+```{r setup, include=FALSE}
+#knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls()) 
+#setwd("/Work/Projects/EMASE_paper/reproduce")
+library(ggplot2)
+setwd(dir = "/Users/narayan/Projects/EMASE_paper/")
+```
+```{r gene_info1, include=FALSE}
+########################################
+# Step 1: get Indel Info
+# Step 2: get gene location info
+# Step 3: Merge Gene Location Info to SNP/Indel Info
+########################################
+########################################
+### SNP Indel Counts information
+########################################
+sindelInfo = read.table("~/Projects/EMASE_paper/data/R75-REL1410/NP-sindels-within-cds-R75-REL1410-mm10.txt")
+sindelInfo = sindelInfo[order(sindelInfo$V1),]
+colnames(sindelInfo)=c("Gene","SNP","Indels")
+sindelInfo$sindel<-sindelInfo$SNP+sindelInfo$Indels
+sindelInfo[1:3,]
+```
+
+```{r gene_info2,include=FALSE}
+########################################
+### ensembl gene location
+########################################
+ens.loc = read.table("~/Projects/EMASE_paper/data/R75-REL1410/ens-gene-loc-R75-REL1410-mm10.txt", header=T)
+dups = which(duplicated(ens.loc[,1]) )
+length(dups)
+### remove duplicated IDs
+if (length(dups) !=0){
+  ens.loc =ens.loc[-dups,]
+}
+ens.loc[1:3,]
+```
+```{r snp_indel}
+########################################
+### Merge ensembl gene location with SNP/Indel info
+########################################
+#### get genes in both ensembl and SNP/Indel info
+ensG.sindel= intersect(sindelInfo[,1], ens.loc[,1])
+### subset the ensembl gen location table
+ensG.sub =   ens.loc[match(ensG.sindel, as.vector(ens.loc$ensID)),]
+all(ensG.sindel==ensG.sub[,1])
+### subset the SNP/Indel table
+sindel.sub = sindelInfo[match(ensG.sindel, as.vector(sindelInfo[,1])),]
+all(ensG.sindel==sindel.sub[,1])
+colnames(ensG.sub)=c("ensID","chr","start","end")
+### Merged ensembl gene location with SNP/Indel info
+ensLoc.sindel = data.frame(ensG.sub,sindel.sub)
+all(ensG.sindel==ensLoc.sindel[,1])
+ensLoc.sindel[1:3,]
+```
+
+```{r X_chr_info}
+########################################
+### Get X chhromsome Info
+########################################
+ens.Xind = which(ensLoc.sindel$chr=="X")
+ens.MTind = which(ensLoc.sindel$V2=="M")
+ens.MXind = union(ens.Xind,ens.MTind)
+ens.XM = ensLoc.sindel[ens.MXind,]
+########################################
+### Vitamin D experimental design
+########################################
+vitaD = read.table("~/Projects/EMASE_paper/data/R75-REL1410/vitaminD-RNASeq-data-info.txt", header=T)
+### sort by Direction of Cross
+vita= vitaD[order(vitaD$Cross),]
+mIDs = vita[,1]
+```
+```{r exp_data}
+####Get estimated expression data
+p2Exp ="/Users/narayan/Projects/EMASE_paper/data/R75-REL1410/geneExp/"
+p2Uniq ="/Users/narayan/Projects/EMASE_paper/data/R75-REL1410/alignCnts/"
+nodCnt.em =c()
+pwkCnt.em =c()
+nodCnt.uniq =c()
+pwkCnt.uniq =c()
+i =1
+for (i in 1:length(mIDs)){
+  mouseID = mIDs[i]
+  p2ResFile.em = paste(c(p2Exp,mouseID,".genes.effective_read_counts"),collapse="")  
+  p2ResFile.uniq = paste(c(p2Uniq,mouseID,".genes.alignment_counts"),collapse="")  
+  alleleCnt.em = read.table(p2ResFile.em, header=T)
+  colnames(alleleCnt.em)=c("locus","D","G","exp")
+  alleleCnt.uniq = read.table(p2ResFile.uniq, header=T)
+  alleleCnt.ems = alleleCnt.em[order(as.vector(alleleCnt.em$locus)),]
+  alleleCnt.uniqs = alleleCnt.uniq[order(as.vector(alleleCnt.uniq$locus)),]
+  all(as.vector(alleleCnt.ems[,1])==as.vector(alleleCnt.uniqs[,1]))
+  nodCnt.em = cbind(nodCnt.em, alleleCnt.ems[,2])
+  pwkCnt.em = cbind(pwkCnt.em, alleleCnt.ems[,3])
+  nodCnt.uniq = cbind(nodCnt.uniq, alleleCnt.uniqs[,4])
+  pwkCnt.uniq = cbind(pwkCnt.uniq, alleleCnt.uniqs[,5])
+}
+emResFile = paste(c(p2Exp,mIDs[1],".genes.effective_read_counts"),collapse="")
+emRes = read.table(emResFile, header=T)
+emRes.s = emRes[order(emRes[,1]),]
+ensIDs = as.vector(emRes.s[,1])
+colnames(nodCnt.em) = mIDs
+rownames(nodCnt.em) = ensIDs
+colnames(pwkCnt.em) = mIDs
+rownames(pwkCnt.em) = ensIDs
+totCnt.em = nodCnt.em + pwkCnt.em
+colnames(nodCnt.uniq) = mIDs
+rownames(nodCnt.uniq) = ensIDs
+colnames(pwkCnt.uniq) = mIDs
+rownames(pwkCnt.uniq) = ensIDs
+totCnt.uniq = nodCnt.uniq + pwkCnt.uniq
+```
+
+```{r subset_exp_data}
+########################################
+### Subset expression count data (and unique count) with 
+### ensembl location sindel table
+########################################
+### get gene IDs from EMASE gene counts
+ensG.cnts = as.vector(rownames(totCnt.em))
+### Intersect gene IDs from EMASE gene counts with ensembl SINDEL table
+cnt.sindel= intersect(ensLoc.sindel[,1], ensG.cnts)
+### subset the gene location  and sindel table
+ensLoc.sub =   ensLoc.sindel[match(cnt.sindel,as.vector(ensLoc.sindel$ensID)),]
+all(cnt.sindel==ensLoc.sub[,1])
+### subset exp data
+totCnt.sub = totCnt.em[match(cnt.sindel, rownames(totCnt.em)),]
+totUniqCnt.sub = totCnt.uniq[match(cnt.sindel, rownames(totCnt.uniq)),]
+nodCnt.sub = nodCnt.em[match(cnt.sindel, rownames(totCnt.em)),]
+nodUniqCnt.sub = nodCnt.uniq[match(cnt.sindel, rownames(totCnt.uniq)),]
+pwkCnt.sub = pwkCnt.em[match(cnt.sindel, rownames(totCnt.em)),]
+pwkUniqCnt.sub = pwkCnt.uniq[match(cnt.sindel, rownames(totCnt.uniq)),]
+all(rownames(totCnt.sub)==as.vector(ensLoc.sub$ensID))
+all(rownames(nodCnt.sub)==ensLoc.sub$ensID)
+all(rownames(pwkCnt.sub)==ensLoc.sub$ensID)
+all(rownames(totUniqCnt.sub)==ensLoc.sub$ensID)
+all(rownames(nodUniqCnt.sub)==ensLoc.sub$ensID)
+all(rownames(pwkUniqCnt.sub)==ensLoc.sub$ensID)
+nodInfo =  data.frame(ensLoc.sub, nodCnt.sub)
+pwkInfo =  data.frame(ensLoc.sub, pwkCnt.sub)
+totInfo =  data.frame(ensLoc.sub,totCnt.sub)
+nodInfo.uniq =  data.frame(ensLoc.sub, nodUniqCnt.sub)
+pwkInfo.uniq =  data.frame(ensLoc.sub, pwkUniqCnt.sub)
+totInfo.uniq =  data.frame(ensLoc.sub, totUniqCnt.sub)
+write.table(nodInfo,"vitaD-NOD-cnts-ens-sindel.txt", 
+            row.names=F, col.names=T, quote=F)
+write.table(pwkInfo,"vitaD-PWK-cnts-ens-sindel.txt", 
+            row.names=F, col.names=T, quote=F)
+write.table(totInfo,"vita-totExp-cnts-ens-sindel.txt", 
+            row.names=F, col.names=T, quote=F)
+write.table(nodInfo.uniq,"vitaD-NOD-uniq-cnts-ens-sindel.txt", 
+            row.names=F, col.names=T, quote=F)
+write.table(pwkInfo.uniq,"vitaD-PWK-uniq-cnts-ens-sindel.txt", 
+            row.names=F, col.names=T, quote=F)
+write.table(totInfo.uniq,"vita-totExp-uniq-cnts-ens-sindel.txt", 
+            row.names=F, col.names=T, quote=F)
+```
+
+```{r genes_with_snps}
+thres=10
+## get percent of samples with uniqCnts above threshold
+pctExpressed = apply(totCnt.sub,1,function(x){
+  nHigh=length(which(x>=thres));       
+  return(nHigh/length(x))})
+zExpInd.sub = which(pctExpressed < 0.8)
+################################
+### non zero rows of totCnt and pwkCnt
+################################
+totCntEM.nz = totInfo[-zExpInd.sub,]
+pwkCntEM.nz = pwkInfo[-zExpInd.sub,]
+nodCntEM.nz = nodInfo[-zExpInd.sub,]
+#################################
+### get only genes on autosomes
+#################################
+#genesOnX.em = rownames(totSumEM.x)
+X.ind = which(totCntEM.nz$chr=="X")
+Y.ind = which(totCntEM.nz$chr=="Y")
+M.ind = which(totCntEM.nz$chr=="M")
+xym.ind = c(X.ind, Y.ind,M.ind)
+totCntEM.auto = totCntEM.nz[-xym.ind,]
+pwkCntEM.auto = pwkCntEM.nz[-xym.ind,]
+nodCntEM.auto = nodCntEM.nz[-xym.ind,]
+dim(totCntEM.auto)
+dim(pwkCntEM.auto)
+dim(nodCntEM.auto)
+all(rownames(totCntEM.auto)==rownames(pwkCntEM.auto))
+totCntEM.X =totCntEM.nz[X.ind,]
+pwkCntEM.X =pwkCntEM.nz[X.ind,]
+nodCntEM.X =nodCntEM.nz[X.ind,]
+all(rownames(totCntEM.X)==rownames(pwkCntEM.X))
+
+#################################
+#### remove genes with no SNPs
+################################
+varInd = which(totCntEM.auto$sindel>0)
+totCntWSI.auto=totCntEM.auto[varInd,]
+nodCntWSI.auto=pwkCntEM.auto[varInd,]
+pwkCntWSI.auto=nodCntEM.auto[varInd,]
+varInd.X = which(totCntEM.X$sindel>0)
+totCntWSI.X=totCntEM.X[varInd.X,]
+nodCntWSI.X=pwkCntEM.X[varInd.X,]
+pwkCntWSI.X=nodCntEM.X[varInd.X,]
+pwkCntWSI.X[1:5,1:10]
+```
+### Allele-specific expression analysis on NODxPWD and PWKxNOD crosses
+
+```{r NxP_hist}
+######################
+# NODxPWK AF Histogram
+######################
+pwkCnt.np=pwkCntWSI.auto[,9:ncol(pwkCntWSI.auto)][,1:24]
+dim(pwkCnt.np)
+totCnt.np=totCntWSI.auto[,9:ncol(totCntWSI.auto)][,1:24]
+dim(totCnt.np)
+pwkTotCnt.np =data.frame(pwkCnt=apply(pwkCnt.np,1,sum),totCnt=apply(totCnt.np,1,sum))
+head(pwkTotCnt.np)
+#hist(pwkTotCnt.np$pwkCnt/pwkTotCnt.np$totCnt,breaks=100,col="grey", xlab="PWK Allele Frequency", main="NODxPWK")
+
+pwkCnt.pn=pwkCntWSI.auto[,9:ncol(pwkCntWSI.auto)][,25:48]
+dim(pwkCnt.pn)
+totCnt.pn=totCntWSI.auto[,9:ncol(totCntWSI.auto)][,25:48]
+dim(totCnt.pn)
+pwkTotCnt.pn =data.frame(pwkCnt=apply(pwkCnt.pn,1,sum),totCnt=apply(totCnt.pn,1,sum))
+par(mfrow=c(1,1))
+length(which(pwkTotCnt.pn$pwkCnt/pwkTotCnt.pn$totCnt<.4))
+#pdf("af-hist-pn-vitaD.pdf")
+#hist(pwkTotCnt.pn$pwkCnt/pwkTotCnt.pn$totCnt,breaks=100,col="grey",
+#     ylim=c(0,700),xlab="PWK Allele Frequency", main="PWK x NOD")
+#dev.off()
+#pdf("af-hist-np-vitaD.pdf")
+#hist(pwkTotCnt.np$pwkCnt/pwkTotCnt.np$totCnt,breaks=100,col="grey", 
+#     ylim=c(0,700),xlab="PWK Allele Frequency", main="PWK x NOD")
+#dev.off()
+##################################################
+##################################################
+pwkCntX.np=pwkCntWSI.X[,9:ncol(pwkCntWSI.X)][,1:24]
+dim(pwkCntX.np)
+totCntX.np=totCntWSI.X[,9:ncol(totCntWSI.X)][,1:24]
+dim(totCntX.np)
+pwkTotCntX.np =data.frame(pwkCnt=apply(pwkCntX.np,1,sum),totCnt=apply(totCntX.np,1,sum))
+#pdf("af-hist-np-vitaD-X.pdf")
+#hist(pwkTotCntX.np$pwkCnt/pwkTotCntX.np$totCnt,breaks=100,col="green", 
+#     ylim=c(0,150),xlab="PWK Allele Frequency", main="NODxPWK")
+#dev.off()
+pwkCntX.pn=pwkCntWSI.X[,9:ncol(pwkCntWSI.X)][,25:48]
+dim(pwkCntX.pn)
+totCntX.pn=totCntWSI.X[,9:ncol(totCntWSI.X)][,25:48]
+dim(totCntX.pn)
+pwkTotCntX.pn =data.frame(pwkCnt=apply(pwkCntX.pn,1,sum),totCnt=apply(totCntX.pn,1,sum))
+#pdf("af-hist-pn-vitaD-X.pdf")
+#hist(pwkTotCntX.pn$pwkCnt/pwkTotCntX.pn$totCnt,breaks=100,col="green", 
+#     ylim=c(0,150),xlab="PWK Allele Frequency", main="PWK x NOD")
+#dev.off()
+
+#pdf("../../figures/af-hist-np-pn-vitaD-separate-X.pdf")
+par(mfrow=c(2,2))
+hist(pwkTotCnt.np$pwkCnt/pwkTotCnt.np$totCnt,breaks=100,col="grey", 
+     ylim=c(0,700),xlab="PWK Allele Frequency", main="NOD x PWK")
+hist(pwkTotCnt.pn$pwkCnt/pwkTotCnt.pn$totCnt,breaks=100,col="grey",
+     ylim=c(0,700),xlab="PWK Allele Frequency", main="PWK x NOD")
+hist(pwkTotCntX.np$pwkCnt/pwkTotCntX.np$totCnt,breaks=100,col="green", 
+     ylim=c(0,150),xlab="PWK Allele Frequency", main="NODxPWK")
+hist(pwkTotCntX.pn$pwkCnt/pwkTotCntX.pn$totCnt,breaks=100,col="green", 
+     ylim=c(0,150),xlab="PWK Allele Frequency", main="PWK x NOD")
+#dev.off()
+```
+
+
+```{r galaxy_plot}
+pwkAFEM.np=pwkTotCnt.np$pwkCnt/pwkTotCnt.np$totCnt
+pwkAFEM.pn=pwkTotCnt.pn$pwkCnt/pwkTotCnt.pn$totCnt
+length(pwkAFEM.pn)
+getwd()
+fname =paste(c("new-pwk-af-EM-vita-np-vs-pn-",thres,".pdf"),collapse="")
+print(fname)
+#pdf(fname)
+```
+```{r galaxy_plot2}
+colors = densCols(x=pwkAFEM.np, y=pwkAFEM.pn,
+                  colramp = colorRampPalette(c("black","lightblue","green","red")))
+              
+plot(pwkAFEM.np, pwkAFEM.pn,
+     col=colors,xlab="proportion of PWK allele in NOD x PWK", cex=0.8, pch=21,
+     ylab="proportion of PWK allele in PWK x NOD")
+text(.1,1, "Peg3", cex = 1.2, col="darkgreen")
+text(.07,.96, "Impact", cex = 1.2, col="darkgreen")
+text(.03,.92, "Zrsr1", cex = 1.2, col="darkgreen")
+text(.13,0.83, "Snrprn", cex = 1.2, col="darkgreen")
+text(.97,.04, "Igf2r", cex = 1.2,col="blue")
+text(.78,.32, "H13", cex = 1.2,col="blue")
+text(.85,.45, "Grb10/Meg1", cex = 1.2,col="blue")
+text(.96,.62, "Dact2", cex = 1.2,col="blue")
+```
+
+```{r NxP_data}
+####
+# Get NODxPWK F1 data
+####
+nodCnt.np=nodCntWSI.auto[,9:ncol(nodCntWSI.auto)][,1:24]
+dim(nodCnt.np)
+rownames(nodCnt.np)=nodCntWSI.auto[,1]
+nodCnt.np[1:5,1:5]
+pwkCnt.np=pwkCntWSI.auto[,9:ncol(pwkCntWSI.auto)][,1:24]
+dim(pwkCnt.np)
+rownames(pwkCnt.np)=pwkCntWSI.auto[,1]
+totCnt.np=totCntWSI.auto[,9:ncol(totCntWSI.auto)][,1:24]
+rownames(totCnt.np)=totCntWSI.auto[,1]
+dim(totCnt.np)
+totCnt.np[1:5,1:5]
+```
+
+```{r PxN_data}
+####
+# Get PWKxNOD F1 data
+####
+nodCnt.pn=nodCntWSI.auto[,9:ncol(nodCntWSI.auto)][,25:48]
+dim(nodCnt.pn)
+rownames(nodCnt.pn)=nodCntWSI.auto[,1]
+pwkCnt.pn=pwkCntWSI.auto[,9:ncol(pwkCntWSI.auto)][,25:48]
+dim(pwkCnt.pn)
+rownames(pwkCnt.pn)=pwkCntWSI.auto[,1]
+totCnt.pn=totCntWSI.auto[,9:ncol(totCntWSI.auto)][,25:48]
+dim(totCnt.pn)
+rownames(totCnt.pn)=totCntWSI.auto[,1]
+```
+
+```{r ase_data}
+ase.bb = read.table("~/Projects/EMASE_paper/reproduce/vitaD-ASE-betabinom-pvals-binom-pvals.txt", header=T)
+head(ase.bb)
+dim(ase.bb)
+### Beta Binomial significance
+pwkTotCnt.np$BetaBinqvals.np <- ase.bb$BetaBinqvals.np
+pwkTotCnt.np$BetaBinpvals.np <- ase.bb$BetaBinpvals.np
+head(pwkTotCnt.np)
+dim(pwkTotCnt.np)
+ase.sig=pwkTotCnt.np[pwkTotCnt.np$BetaBinqvals.np <=0.01,]
+dim(ase.sig)
+sigInd= which(pwkTotCnt.np$BetaBinqvals.np <=0.01)
+notsigInd= which(pwkTotCnt.np$BetaBinqvals.np >0.01)
+head(notsigInd)
+length(pwkTotCnt.np$BetaBinqvals.np)
+length(notsigInd)+length(sigInd)
+is_sig = rep(1,length(pwkTotCnt.np$BetaBinqvals.np))
+is_sig[notsigInd]=0
+```
+```{r ase_fig}
+par(mfrow=c(1,2))
+sig_df=data.frame(pwkAF=round(pwkTotCnt.np$pwkCnt)/round(pwkTotCnt.np$totCnt),
+                  is_sig=is_sig)
+#hist(sig_df$pwkAF, breaks=100, col="grey")
+#ggplot(sig_df, aes(x=pwkAF, fill=factor(is_sig))) + theme_bw() +
+  #scale_y_continuous(limits = c(0, 800))+
+  #theme(axis.text=element_text(size=20),
+  #      axis.title=element_text(size=24),
+  #      plot.title=element_text(size=24))+
+  #xlab("Proportion of PWK Allele count")+
+  #ylab("Frequency")+
+  #ggtitle("Beta-Binomial Model")+
+  #geom_histogram(binwidth = 0.01,alpha=.7, position="identity")+
+ #scale_fill_brewer(palette="Set1", direction=-1) +
+  #theme(legend.position="none")
+```
+```{r ase_binomial}
+pwkTotCnt.np$Binqvals.np <- ase.bb$Binqvals.np
+ase_b_np.sig=pwkTotCnt.np[pwkTotCnt.np$Binqvals.np <=0.01,]
+ase_b_np.notsig=pwkTotCnt.np[pwkTotCnt.np$Binqvals.np >0.01,]
+pwkTotCnt.np$Binqvals.np <- ase.bb$Binqvals.np
+pwkTotCnt.np$Binpvals.np <- ase.bb$Binpvals.np
+
+sigInd_bin= which(pwkTotCnt.np$Binqvals.np <=0.01)
+notsigInd_bin= which(pwkTotCnt.np$Binqvals.np >0.01)
+is_sig_bin = rep(1,length(pwkTotCnt.np$Binqvals.np))
+is_sig_bin = rep(1,length(pwkTotCnt.np$Binqvals.np))
+is_sig_bin[notsigInd_bin]=0
+sig_df_bin=data.frame(pwkAF=round(pwkTotCnt.np$pwkCnt)/round(pwkTotCnt.np$totCnt),
+                  is_sig=is_sig_bin)
+sig_df=data.frame(pwkAF=round(pwkTotCnt.np$pwkCnt)/round(pwkTotCnt.np$totCnt),
+                  is_sig=is_sig)
+
+head(sig_df)
+#png(sig-notsig-ase-hist-binomial-np.png
+#png("/Users/narayan/Projects/EMASE_paper/figures/sig-notsig-ase-hist-beta-binomial-np.png", units="px", width=2000, height=2000, res=300)
+ggplot(sig_df, aes(x = pwkAF, fill=factor(is_sig))) +geom_histogram(binwidth = 0.005)+theme_bw()+  theme(axis.text=element_text(size=20),
+        axis.title=element_text(size=24),
+        plot.title=element_text(size=24))+
+  xlab("Proportion of PWK Allele count")+
+  ylab("Frequency")+
+  ggtitle("Beta-Binomial Model")+
+  scale_fill_brewer(palette="Set1", direction=-1) +
+  theme(legend.position="none")
+#dev.off()
+
+#png("/Users/narayan/Projects/EMASE_paper/figures/sig-notsig-ase-hist-binomial-np.png", units="px", width=2000, height=2000, res=300)
+ggplot(sig_df_bin, aes(x = pwkAF, fill=factor(is_sig))) +geom_histogram(binwidth = 0.005)+theme_bw()+  theme(axis.text=element_text(size=20),
+        axis.title=element_text(size=24),
+        plot.title=element_text(size=24))+
+  xlab("Proportion of PWK Allele count")+
+  ylab("Frequency")+
+  ggtitle("Binomial Model")+
+  scale_fill_brewer(palette="Set1", direction=-1) +
+  theme(legend.position="none")
+#dev.off()
+#qplot(data=sig_df, pwkAF,fill=factor(is_sig),binwidth=0.005)
+#qplot(data=sig_df_bin, pwkAF,fill=factor(is_sig),binwidth=0.005)
+
+par(mfrow=c(1,2))
+
+#hist(sig_df$pwkAF, breaks=100, col="grey")
+#ggplot(sig_df, aes(x=pwkAF, fill=factor(is_sig)
+#)) + theme_bw() +
+#  scale_y_continuous(limits = c(0, 800))+
+#  theme(axis.text=element_text(size=20),
+#        axis.title=element_text(size=24),
+#        plot.title=element_text(size=24))+
+#  xlab("Proportion of PWK Allele count")+
+#  ylab("Frequency")+
+#  ggtitle("Beta-Binomial Model")+
+#  geom_histogram(binwidth = 0.01,alpha=.7, position="identity")+
+# scale_fill_brewer(palette="Set1", direction=-1) +
+#  theme(legend.position="none")
+
+#ggplot(sig_df_bin, aes(x=pwkAF, fill=factor(is_sig))) + theme_bw() +
+#  scale_y_continuous(limits = c(0, 800))+
+#  #theme(axis.line = element_line(colour = "black"),
+#  #      panel.border = element_blank(),
+#  #      panel.background = element_blank()) +
+#  theme(axis.text=element_text(size=20),
+#        axis.title=element_text(size=24),
+#        plot.title=element_text(size=24))+
+#  xlab("Proportion of PWK Allele count")+
+#  ylab("Frequency")+
+#  ggtitle("Binomial Model")+
+#  geom_histogram(binwidth = 0.01,alpha=.7, position="identity")+
+#  scale_fill_brewer(palette="Set1", direction = -1) + theme(legend.position="none")
+```
+```{r vita_design}
+vita.dsgn = vitaD[,c(1:3,5)]
+head(vita.dsgn)
+vita.dsgn$Age[which(vita.dsgn$Age==25)]=24
+vmeta = read.csv("~/Dropbox/EMASE/Figures/JAX_liver_data.csv")
+
+aIDs=as.numeric(sub("X","",colnames(nodCntWSI.auto[,9:ncol(nodCntWSI.auto)])))
+aIDs
+vita.dsgn = vmeta[,1:4]
+head(vita.dsgn)
+vita.cross = vita.dsgn[match(aIDs,vita.dsgn[,1]),]
+all(vita.cross[,1] ==aIDs)
+vita.cross$Age=as.numeric(as.factor(vita.cross$Age))
+head(vita.cross)
+attach(vita.cross)
+npCnts = cbind(nodCntWSI.auto[,9:ncol(nodCntWSI.auto)],pwkCntWSI.auto[,9:ncol(pwkCntWSI.auto)])
+npCnts[1:5,1:10]
+```
+```{r age_effect_logit_od}
+########################################
+# Age Effect Logit OD Model
+########################################
+
+ageEffectLogitOD <- function(aCntTab){
+  logit.gm1 <- glm(aCntTab ~ Age+Diet+Strain,
+                   family = quasibinomial)
+  logit.gm2 <- glm(aCntTab ~ Diet+Strain,  
+                   family = quasibinomial)
+  pval= anova(logit.gm1,logit.gm2,test="Chisq")[2,5]     
+  return(pval)
+} 
+pvalsOD.age = apply(npCnts,1, function(x){
+  #cntTab=cbind(round(x[1:48]+round(runif(48,min=0,max=2))),
+  #             round(x[49:96]+round(runif(48,min=0,max=2))));
+  cntTab=cbind(round(x[1:48]),round(x[49:96]));
+  return(ageEffectLogitOD(cntTab))
+})
+
+```
+
+```{r age_effect_logit_binom}
+ageEffectLogitB <- function(aCntTab){
+  logit.gm1 <- glm(aCntTab ~ Age+Diet+Strain,
+                   family = binomial)
+  logit.gm2 <- glm(aCntTab ~ Diet+Strain,  
+                   family = binomial)
+  pval= anova(logit.gm1,logit.gm2,test="Chisq")[2,5]     
+  return(pval)
+} 
+pvalsBinom.age = apply(npCnts,1, function(x){
+  #cntTab=cbind(round(x[1:48]+round(runif(48,min=0,max=2))),
+  #             round(x[49:96]+round(runif(48,min=0,max=2))));
+  cntTab=cbind(round(x[1:48]),round(x[49:96]));
+  return(ageEffectLogitB(cntTab))
+})
+
+```
+```{r diet_effect_logit_OD}
+dietEffectLogitOD <- function(aCntTab){
+  logit.gm1 <- glm(aCntTab ~ Age+Diet+Strain,
+                   family = quasibinomial)
+  logit.gm2 <- glm(aCntTab ~ Age+Strain,  
+                   family = quasibinomial)
+  pval= anova(logit.gm1,logit.gm2,test="Chisq")[2,5]     
+  return(pval)
+} 
+
+pvalsOD.diet = apply(npCnts,1, function(x){
+  cntTab=cbind(round(x[1:48]),round(x[49:96]));
+  #cntTab=cbind(round(x[1:48]+round(runif(48,min=0,max=2))),
+  #             round(x[49:96]+round(runif(48,min=0,max=2))));
+  return(dietEffectLogitOD(cntTab))
+})
+```
+
+```{r diet_effect_logit_binom}
+dietEffectLogitB <- function(aCntTab){
+  logit.gm1 <- glm(aCntTab ~ Age+Diet+Strain,
+                   family = binomial)
+  logit.gm2 <- glm(aCntTab ~ Age+Strain,  
+                   family = binomial)
+  pval= anova(logit.gm1,logit.gm2,test="Chisq")[2,5]     
+  return(pval)
+} 
+
+pvalsBinom.diet = apply(npCnts,1, function(x){
+  cntTab=cbind(round(x[1:48]),round(x[49:96]));
+  #cntTab=cbind(round(x[1:48]+round(runif(48,min=0,max=2))),
+  #             round(x[49:96]+round(runif(48,min=0,max=2))));
+  return(dietEffectLogitB(cntTab))
+})
+#pdf("Diet-effect-ASE-vitaD-LogitBinom-pval-hist.pdf")
+#pdf("Diet-effect-ASE-vitaD-LogitOD-pval-hist.pdf")
+```
+
+```{r cross_effect_logit_OD}
+########################################
+# Direction of Cross Effect on ASE 
+########################################
+crossEffectLogitOD <- function(aCntTab){
+  logit.gm1 <- glm(aCntTab ~ Age+Diet+Strain,
+                   family = quasibinomial)
+  logit.gm2 <- glm(aCntTab ~ Age+Diet,  
+                   family = quasibinomial)
+  pval= anova(logit.gm1,logit.gm2,test="Chisq")[2,5]     
+  return(pval)
+} 
+
+pvalsOD.dcross = apply(npCnts,1, function(x){
+  cntTab=cbind(round(x[1:48]),round(x[49:96]));
+  #cntTab=cbind(round(x[1:48]+round(runif(48,min=0,max=2))),
+  #             round(x[49:96]+round(runif(48,min=0,max=2))));
+  return(crossEffectLogitOD(cntTab))
+})
+
+#pdf("Cross-effect-ASE-vitaD-LogitOD-pval-hist.pdf")
+#hist(as.numeric(pvalsOD.age),col="grey", main="Quasi-binomial Logistic", breaks=100)
+```
+
+```{r cross_effect_logit_binom}
+crossEffectLogitB <- function(aCntTab){
+  logit.gm1 <- glm(aCntTab ~ Age+Diet+Strain,
+                   family = binomial)
+  logit.gm2 <- glm(aCntTab ~ Age+Diet,  
+                   family = binomial)
+  pval= anova(logit.gm1,logit.gm2,test="Chisq")[2,5]     
+  return(pval)
+} 
+
+pvalsBinom.dcross = apply(npCnts,1, function(x){
+  cntTab=cbind(round(x[1:48]),round(x[49:96]));
+  #cntTab=cbind(round(x[1:48]+round(runif(48,min=0,max=2))),
+  #             round(x[49:96]+round(runif(48,min=0,max=2))));
+  return(crossEffectLogitB(cntTab))
+})
+par(mfrow=c(2,3))
+#pdf("Cross-effect-ASE-vitaD-LogitBinom-pval-hist.pdf")
+#hist(as.numeric(pvalsOD.age),col="grey", main="Quasi-binomial Logistic", breaks=100)
+
+#pdf("Age-effect-ASE-vitaD-LogitB-pval-hist.pdf")
+hist(as.numeric(pvalsBinom.age),col="grey", main="Age Effect: Logit Binom", xlab="P-values",
+     cex.lab=1.5,cex.axis=1.75,breaks=100,ylim=c(0,3000))
+
+
+hist(pvalsBinom.diet, col="grey",breaks=100,ylim=c(0,3000),
+     cex.lab=1.5,cex.axis=1.75, xlab="P-values", main="Diet Effect: Binomial")
+hist(as.numeric(pvalsBinom.dcross),col="grey",xlab="P-values",
+     breaks=100,ylim=c(0,3000), cex.lab=1.5,cex.axis=1.75, main="Cross Effect: Logit Binomial")
+
+hist(as.numeric(pvalsOD.age),col="grey", xlab="P-values",
+     cex.lab=1.5,cex.axis=1.75,breaks=100,ylim=c(0,350), main="Age Effect: Logit OD")
+
+hist(pvalsOD.diet, col="grey",breaks=100,ylim=c(0,350),
+     cex.lab=1.5,cex.axis=1.75, xlab="P-values", main="Diet Effect: Logit OD")
+
+hist(as.numeric(pvalsOD.dcross),col="grey",xlab="P-values",
+     breaks=100,ylim=c(0,350), cex.lab=1.5,cex.axis=1.75,main="Cross Effect: Logit OD")
+
+```
+```{r gene_order}
+gene.order = as.vector(nodCntWSI.auto[,1])
+head(gene.order)
+length(gene.order)
+mergeNAgenes <- function(genes,naGenes,gene.order){
+  genes.merge = c(genes,naGenes)
+  genes.mo= genes.merge[match(gene.order,names(genes.merge))]
+  all(names(genes.mo)==gene.order)
+  return(genes.mo)
+}
+```
+
+```{r diet_fdr}
+#####################
+#FDR Analysis Age
+########################
+#library(qvalue)
+source("~/DropBox/EMASE/Codes/qvalue.R")
+
+#####################
+#FDR Analysis Diet
+########################
+names(pvalsOD.diet)=as.vector(nodCntWSI.auto[,1])
+pvalsOD.dietNA = pvalsOD.diet[-which(is.na(pvalsOD.diet))]
+head(pvalsOD.dietNA)
+sum(is.na(pvalsOD.diet))
+qobjOD.diet = qvalue(pvalsOD.dietNA)
+summary(qobjOD.diet)
+
+#######
+# 5% FDR threshold
+pThresOD.dietf5= max(qobjOD.diet$pvalues[qobjOD.diet$qvalues <= 0.05])
+head(names(pvalsOD.dietNA[which(pvalsOD.dietNA<=pThresOD.dietf5)]))
+genesOD.dietf5 = names(pvalsOD.dietNA[which(pvalsOD.dietNA<=pThresOD.dietf5)])
+fdr5OD.dietNA = as.numeric(pvalsOD.dietNA<=pThresOD.dietf5)
+names(fdr5OD.dietNA)=names(pvalsOD.dietNA)
+na.diet = pvalsOD.diet[is.na(pvalsOD.diet)]
+fdr5OD.diet = mergeNAgenes(fdr5OD.dietNA,na.diet, gene.order)
+head(fdr5OD.diet)
+all(names(fdr5OD.diet)==names(pvalsOD.diet))
+######################
+# 10% FDR threshold
+#####################
+pThresOD.dietf10= max(qobjOD.diet$pvalues[qobjOD.diet$qvalues <= 0.1])
+head(names(pvalsOD.dietNA[which(pvalsOD.dietNA<=pThresOD.dietf10)]))
+genesOD.dietf10 = names(pvalsOD.dietNA[which(pvalsOD.dietNA<=pThresOD.dietf10)])
+fdr10OD.dietNA = as.numeric(pvalsOD.dietNA<=pThresOD.dietf10)
+names(fdr10OD.dietNA)=names(pvalsOD.dietNA)
+na.diet = pvalsOD.diet[is.na(pvalsOD.diet)]
+fdr10OD.diet = mergeNAgenes(fdr10OD.dietNA,na.diet, gene.order)
+head(fdr5OD.diet)
+all(names(fdr10OD.diet)==names(pvalsOD.diet))
+```
+```{r cross_fdr}
+#####################
+#FDR Analysis Direction of Cross
+########################
+summary(pvalsOD.dcross)
+names(pvalsOD.dcross)=as.vector(nodCntWSI.auto[,1])
+pvalsOD.dcrossNA = pvalsOD.dcross[-which(is.na(pvalsOD.dcross))]
+#pvalsOD.dcrossNA= pvalsOD.dcross
+head(pvalsOD.dcrossNA)
+sum(is.na(pvalsOD.dcross))
+qobjOD.dcross = qvalue(pvalsOD.dcrossNA)
+summary(qobjOD.dcross)
+#######
+# 5% FDR threshold
+pThresOD.dcrossf5= max(qobjOD.dcross$pvalues[qobjOD.dcross$qvalues <= 0.05])
+head(names(pvalsOD.dcrossNA[which(pvalsOD.dcrossNA<=pThresOD.dcrossf5)]))
+genesOD.dcrossf5 = names(pvalsOD.dcrossNA[which(pvalsOD.dcrossNA<=pThresOD.dcrossf5)])
+fdr5OD.dcrossNA = as.numeric(pvalsOD.dcrossNA<=pThresOD.dcrossf5)
+names(fdr5OD.dcrossNA)=names(pvalsOD.dcrossNA)
+na.dcross = pvalsOD.dcross[is.na(pvalsOD.dcross)]
+fdr5OD.dcross = mergeNAgenes(fdr5OD.dcrossNA,na.dcross, gene.order)
+head(fdr5OD.dcross[which(fdr5OD.dcross==1)])
+dcrossFDR5.genes = names(fdr5OD.dcross[which(fdr5OD.dcross==1)])
+write.table(dcrossFDR5.genes, "poe-dcrossFDR5-genes.txt", 
+            row.names=FALSE, quote=FALSE,col.names=FALSE)
+all(names(fdr5OD.dcross)==names(pvalsOD.dcross))
+
+#######
+# 10% FDR threshold
+pThresOD.dcrossf10= max(qobjOD.dcross$pvalues[qobjOD.dcross$qvalues <= 0.1])
+head(names(pvalsOD.dcrossNA[which(pvalsOD.dcrossNA<=pThresOD.dcrossf10)]))
+genesOD.dcrossf10 = names(pvalsOD.dcrossNA[which(pvalsOD.dcrossNA<=pThresOD.dcrossf10)])
+fdr10OD.dcrossNA = as.numeric(pvalsOD.dcrossNA<=pThresOD.dcrossf10)
+names(fdr10OD.dcrossNA)=names(pvalsOD.dcrossNA)
+na.dcross = pvalsOD.dcross[is.na(pvalsOD.dcross)]
+fdr10OD.dcross = mergeNAgenes(fdr10OD.dcrossNA,na.dcross, gene.order)
+all(names(fdr10OD.dcross)==names(pvalsOD.dcross))
+```
+```{r age_fdr}
+#####################
+#FDR Analysis Age
+########################
+#library(qvalue)
+names(pvalsOD.age)=as.vector(nodCntWSI.auto[,1])
+pvalsOD.ageNA = pvalsOD.age[-which(is.na(pvalsOD.age))]
+#pvalsOD.ageNA = pvalsOD.age
+head(pvalsOD.ageNA)
+sum(is.na(pvalsOD.age))
+qobjOD.age = qvalue(pvalsOD.ageNA)
+summary(qobjOD.age)
+#######
+# 5% FDR threshold
+pThresOD.agef5= max(qobjOD.age$pvalues[qobjOD.age$qvalues <= 0.05])
+genesOD.agef5 = names(pvalsOD.ageNA[which(pvalsOD.ageNA<=pThresOD.agef5)])
+fdr5OD.ageNA = as.numeric(pvalsOD.ageNA<=pThresOD.agef5) 
+names(fdr5OD.ageNA)=names(pvalsOD.ageNA)
+head(fdr5OD.ageNA)
+na.age = pvalsOD.age[is.na(pvalsOD.age)]
+
+fdr5OD.age = mergeNAgenes(fdr5OD.ageNA,na.age, gene.order)
+all(names(fdr5OD.age)==names(pvalsOD.age))
+pThresOD.agef10= max(qobjOD.age$pvalues[qobjOD.age$qvalues <= 0.1])
+genesOD.agef10 = names(pvalsOD.ageNA[which(pvalsOD.ageNA<=pThresOD.agef10)])
+fdr10OD.ageNA = as.numeric(pvalsOD.ageNA<=pThresOD.agef10) 
+names(fdr10OD.ageNA)=names(pvalsOD.ageNA)
+head(fdr10OD.ageNA)
+na.age = pvalsOD.age[is.na(pvalsOD.age)]
+fdr10OD.age = mergeNAgenes(fdr10OD.ageNA,na.age, gene.order)
+all(names(fdr10OD.age)==names(pvalsOD.age))
+```
+```{r diet_hist}
+hist(pvalsOD.dietNA, breaks=100, col="grey",freq=FALSE,ylim=c(0,4), xlab="P-values", main="Diet")
+abline(h=qobjOD.diet$pi,col="red",cex=5)
+```
+
+```{r ase_main_effect_pval_hist}
+length(pvalsOD.age)
+length(pvalsOD.diet)
+length(pvalsOD.dcross)
+par(mfrow=c(1,3))
+hist(pvalsOD.dcrossNA, breaks=100, col="grey",ylim=c(0,4),freq=FALSE, xlab="P-values", main="Direction of Cross")
+abline(h=qobjOD.dcross$pi,col="red",cex=5)
+#dev.off() 
+
+#pdf("Diet-effect-ASE-vitaD-LogitOD-pval-hist-pi0.pdf")
+hist(pvalsOD.dietNA, breaks=100, col="grey",freq=FALSE,ylim=c(0,4), xlab="P-values", main="Diet")
+abline(h=qobjOD.diet$pi,col="red",cex=5)
+#dev.off()
+
+#pdf("Age-effect-ASE-vitaD-LogitOD-pval-hist-pi0.pdf")
+hist(pvalsOD.ageNA, breaks=100, col="grey",freq=FALSE,ylim=c(0,4), xlab="P-values", main="Age")
+abline(h=qobjOD.age$pi,col="red",cex=5)
+#dev.off()
+```
+
+```{r all_pvals}
+######
+# Get Gene Symbols
+######
+library(org.Mm.eg.db)
+help(package="org.Mm.eg.db")
+genes = names(pvalsOD.age)
+head(genes)
+head(mget(genes, org.Mm.egENSEMBL2EG, ifnotfound=NA))
+entrezIDs= sapply(mget(genes, org.Mm.egENSEMBL2EG, ifnotfound=NA), function(x){x[[1]]})
+naGenes = names(which(is.na(entrezIDs)))
+head(naGenes)
+naInds = which(is.na(entrezIDs))
+head(naInds)
+entrezIDs.noNA = entrezIDs[-naInds]
+gene.names=sapply(mget(entrezIDs.noNA, org.Mm.egSYMBOL, ifnotfound=NA), function(x){x[[1]]})
+head(gene.names)
+head(entrezIDs.noNA)
+names(gene.names) = names(entrezIDs.noNA)
+head(gene.names)
+head(entrezIDs[naInds])
+gene.symbols = c(gene.names,entrezIDs[naInds])
+head(gene.symbols)
+length(names(gene.symbols))
+length(names(genes))
+symbols= gene.symbols[match(genes,names(gene.symbols))]
+head(symbols)
+all(names(symbols)==genes)
+length(qobjOD.diet$qvalues)
+
+allPvals = data.frame(ensID=names(pvalsOD.age), gene.symbol=symbols,
+                dcross.pval=pvalsOD.dcross,
+                diet.pval=pvalsOD.diet, 
+                age.pval=pvalsOD.age,
+                dcross.fdr5=fdr5OD.dcross, diet.fdr5=fdr5OD.diet,
+                age.fdr5=fdr5OD.age,dcross.fdr10=fdr10OD.dcross, diet.fdr10=fdr10OD.diet,
+                age.fdr10=fdr10OD.age)
+
+head(allPvals)
+write.table(allPvals,"vitaD-main-effects-ase-pvalsOD-fdr5-10.txt", row.names=FALSE,quote=FALSE,sep="\t")
+allPnQvals = data.frame(ensID=names(pvalsOD.age), gene.symbol=symbols,
+                      dcross.pval=pvalsOD.dcross,
+                      diet.pval=pvalsOD.diet, age.pval=pvalsOD.age, 
+                      dcross.fdr5=fdr5OD.dcross, diet.fdr5=fdr5OD.diet,
+                      age.fdr5=fdr5OD.age,dcross.fdr10=fdr10OD.dcross,
+                      diet.fdr10=fdr10OD.diet,
+                      age.fdr10=fdr10OD.age)
+
+head(allPnQvals)
+write.table(allPnQvals,"vitaD-main-effects-ase-PnQvalsOD-fdr5-10.txt", row.names=FALSE,quote=FALSE,sep="\t")
+#getwd()
+#write.table(data.frame(geneName=as.vector(allPvals[allPvals$age.fdr5==1,]$gene.symbol), 
+#            ensIDs=as.vector(allPvals[allPvals$age.fdr5==1,1])),
+#            file="gene-list-age-vitaD-fdr5.txt", row.names=FALSE, 
+#            col.names=FALSE, quote=FALSE, sep="\t")
+
+#write.table(data.frame(geneName=as.vector(allPvals[allPvals$diet.fdr5==1,]$gene.symbol),ensIDs=as.vector(allPvals[allPvals$diet.fdr5==1,1])),
+#            file="gene-list-diet-vitaD-fdr5.txt", row.names=FALSE, 
+#            col.names=FALSE, quote=FALSE, sep="\t")
+
+#write.table(data.frame(geneName=                   #as.vector(allPvals[allPvals$dcross.fdr5==1,]$gene.symbol), #ensIDs=as.vector(allPvals[allPvals$dcross.fdr5==1,1])),            #file="gene-list-dcross-vitaD-fdr5.txt", row.names=FALSE,           # col.names=FALSE, quote=FALSE, sep="\t")
+```
+
+## EMASE Simulation comparison
+
+```{r emase_simu_data_setup, fig.height=12,fig.width=10}
+library(dplyr)
+methods=c("emase_m1","emase_m2","emase_m3","emase_m4")
+reps= sprintf("%03d", 1:12)
+sampleIDs= as.vector(sapply(methods,function(m){sapply(reps,function(r){paste0(m,".",r)})}))
+p2Dir="~/Projects/EMASE_paper/reproduce/start_m2/align2B6/"
+p2_emase_res="~/Projects/EMASE_paper/reproduce/start_m2/compiled_results/"
+gene_info = read.table("~/Projects/EMASE_paper/reproduce/start_m2/ens-gene-loc-R75-REL1410-mm10.txt",header=T)
+getwd()
+c_names= colnames(gene_info)
+c_names[1]= "Gene_ID"
+colnames(gene_info)=c_names
+for (id in 1:length(1:1)){
+#for (id in 1:length(sampleIDs)){
+    print(sampleIDs[id])
+    simu_info = strsplit(sampleIDs[id], "_")[[1]][[2]]
+    model = strsplit(simu_info[[1]],"\\.")[[1]][[1]]
+    simu_samp = strsplit(simu_info[[1]],"\\.")[[1]][[2]]
+    ############################
+    ############################
+    emase_cmp_file= paste0(p2_emase_res,model,"_simu_truth_rsem_emase1to4_aln_kallisto_",simu_samp,".txt")
+    emase_cmp_res=read.table(emase_cmp_file,header=T)
+    #print(dim(emase_cmp_res))
+    ############################
+    ## WASP ASE estimates
+    ############################
+    wasp_file = paste0(p2Dir,"ase_bed_files/",sampleIDs[id],
+                "_exon_wasp_gatk_exon_gase_split.bed")
+                #"_exome_wasp_gatk_ase_with_genes.bed")
+    B6_wasp=read.table(wasp_file)
+    B6_wasp = data.frame(B6_wasp[,c(1:9,15)])
+    colnames(B6_wasp)=c("chr","start","end","ID","ref","alt","wasp.ref","wasp.alt","wasp.total","Gene_ID")
+    wasp = B6_wasp %>% group_by(Gene_ID) %>% summarize(wasp.N=sum(wasp.ref),
+                                                                  wasp.P=sum(wasp.alt))
+    print(head(wasp))
+    ############################
+    ## Merge ASE estimates from all methods
+    ############################
+    true_align_emase_wasp = full_join(emase_cmp_res,wasp, by="Gene_ID")
+    #true_align_emase_wasp_B6 = full_join(true_align_emase_wasp,B6, by="Gene_ID")
+    #print(dim(true_align_emase_wasp_B6))
+    #print(paste0(sampleIDs[id]," Dim of Full_join: ", nrow(true_align_emase_wasp_B6)))
+    #write.table(true_align_emase_wasp_B6,file=paste0(sampleIDs[id],"_gatk_true_align_emase_kallisto_wasp_B6.txt"), col.names=TRUE, row.names=FALSE,quote=FALSE,sep="\t")
+    write.table(true_align_emase_wasp,file=paste0(sampleIDs[id],"_gatk_true_align_emase_kallisto_wasp.txt"), col.names=TRUE, row.names=FALSE,quote=FALSE,sep="\t")
+    thres = 10
+    allele.thres = filter(true_align_emase_wasp,uniq_N+uniq_P>=thres)
+    write.table(allele.thres,file=paste0(sampleIDs[id],"_af_thres",thres,"_gatk_true_align_emase_kallisto_wasp.txt"),
+                col.names=TRUE,row.names=FALSE,quote=FALSE,sep="\t")
+    gene_only = allele.thres$uniq_gene - (allele.thres$uniq_N+allele.thres$uniq_P)
+    ase = data.frame(true.ase=allele.thres$true_P/(allele.thres$true_N+allele.thres$true_P),
+                     uniq.ase=allele.thres$uniq_P/(allele.thres$uniq_N+allele.thres$uniq_P),
+                     alleleSeq.ase=(allele.thres$uniq_P + (gene_only/2))/(gene_only+allele.thres$uniq_N+allele.thres$uniq_P),
+                     emase2.ase=allele.thres$emase2_P/(allele.thres$emase2_N+allele.thres$emase2_P),
+                     emase4.ase=allele.thres$emase4_P/(allele.thres$emase4_N+allele.thres$emase4_P),
+                     kallisto.ase=allele.thres$kallisto_P/(allele.thres$kallisto_N+allele.thres$kallisto_P),
+                     rsem.ase=allele.thres$rsem_P/(allele.thres$rsem_N+allele.thres$rsem_P),
+                     wasp.ase=allele.thres$wasp.P/(allele.thres$wasp.N+allele.thres$wasp.P))
+                     #B6.ase=allele.thres$B6.P/(allele.thres$B6.N+allele.thres$B6.P))
+    allele.chr= merge(gene_info[,1:2],allele.thres, by="Gene_ID")
+    #print(head(allele.chr))
+    x.ind = which(allele.chr$Chr=="X")
+    y.ind = which(allele.chr$Chr=="Y")
+    xy.ind = c(x.ind,y.ind)
+    ase.x = ase[x.ind,] 
+    #print(head(ase.x))
+    ase.auto = ase[-xy.ind,]
+    print(head(ase.auto))
+    #allele.x=allele.chr[x.ind,]
+    #z.ind = which(allele.x$true_P==0)
+    #############################################
+    # Autosomes
+    #############################################
+    par(mfrow=c(3,2))
+    #############################################
+    ofile_png = paste0(sampleIDs[id],"_auto_hist_thres",thres,"_true.png")
+    #png(ofile_png, units="px", width=2500, height=2000, res=300)
+    par(mar=c(5,5,1,1)+0.1)
+    hist(ase.auto$true.ase,main="True", breaks=50, 
+         xlab="Alt AF",ylim=c(0,900),col="grey",cex.axis = 1.4, cex.lab = 1.8,las=1)
+    abline(v=0.5,col="red")
+    s_mean = mean(ase.auto$true.ase)
+    abline(v=s_mean,col="blue")
+    #dev.off()
+    ofile_png = paste0(sampleIDs[id],"_auto_hist_thres",thres,"_emase2.png")
+    #png(ofile_png, units="px", width=2500, height=2000, res=300)
+    par(mar=c(5,5,1,1)+0.1)
+    hist(ase.auto$emase2.ase,main="EMASE M2", breaks=50, xlab="Alt AF",ylim=c(0,900),col="gray",cex.axis = 1.4, cex.lab = 1.8,las=1)
+    abline(v=0.5,col="red")
+    s_mean = mean(ase.auto$emase2.ase,na.rm=TRUE)
+    abline(v=s_mean,col="blue")
+    #dev.off()
+    ofile_png = paste0(sampleIDs[id],"_auto_hist_thres",thres,"_emase4.png")
+    #png(ofile_png, units="px", width=2500, height=2000, res=300)
+    #par(mar=c(5,5,1,1)+0.1)
+    #hist(ase.auto$emase4.ase,main="EMASE M4", breaks=50, xlab="Alt AF",ylim=c(0,900),col="gray",cex.axis = 1.4, cex.lab = 1.8,las=1)
+    #abline(v=0.5,col="red")
+    #s_mean = mean(ase.auto$emase4.ase,na.rm=TRUE)
+    #abline(v=s_mean,col="blue")
+    #dev.off()
+    #############################################
+    ofile_png = paste0(sampleIDs[id],"_auto_hist_thres",thres,"_rsem.png")
+    #png(ofile_png, units="px", width=2500, height=2000, res=300)
+    par(mar=c(5,5,1,1)+0.1)
+    hist(ase.auto$rsem.ase,main="RSEM", breaks=50, xlab="Alt AF",ylim=c(0,900),col="grey",cex.axis = 1.4, cex.lab = 1.8,las=1)
+    abline(v=0.5,col="red")
+    s_mean = mean(ase.auto$rsem.ase,na.rm=TRUE)
+    abline(v=s_mean,col="blue")
+    #dev.off()
+    ofile_png = paste0(sampleIDs[id],"_auto_hist_thres",thres,"_kallisto.png")
+    #png(ofile_png, units="px", width=2500, height=2000, res=300)
+    par(mar=c(5,5,1,1)+0.1)
+    hist(ase.auto$kallisto.ase,main="Kallisto", breaks=50, xlab="Alt AF",ylim=c(0,900),col="grey",cex.axis = 1.4, cex.lab = 1.8,las=1)
+    abline(v=0.5,col="red")
+    s_mean = mean(ase.auto$kallisto.ase,na.rm=TRUE)
+    abline(v=s_mean,col="blue")
+    #dev.off()
+    #############################################
+    ofile_png = paste0(sampleIDs[id],"_auto_hist_thres",thres,"_uniq.png")
+    #png(ofile_png, units="px", width=2500, height=2000, res=300)
+    par(mar=c(5,5,1,1)+0.1)
+    hist(ase.auto$uniq.ase,main="Unique Reads",breaks=50, xlab="Alt AF",ylim=c(0,900),col="grey",cex.axis = 1.4, cex.lab = 1.8,las=1)
+    abline(v=0.5,col="red")
+    s_mean = mean(ase.auto$uniq.ase)
+    abline(v=s_mean,col="blue",na.rm=TRUE)
+    #dev.off()
+    #############################################
+    ofile_png = paste0(sampleIDs[id],"_auto_hist_thres",thres,"_wasp.png")
+    #png(ofile_png, units="px", width=2500, height=2000, res=300)
+    par(mar=c(5,5,1,1)+0.1)
+    hist(ase.auto$wasp.ase,main="WASP", breaks=50, xlab="Alt AF",ylim=c(0,900),col="grey",cex.axis = 1.4, cex.lab = 1.8,las=1)
+    abline(v=0.5,col="red")
+    s_mean = mean(ase.auto$wasp.ase,na.rm=TRUE)
+    abline(v=s_mean,col="blue")
+    #dev.off()
+    #############################################
+    # Autosomes
+    #############################################
+    par(mfrow=c(3,2))
+    ofile_png = paste0(sampleIDs[id],"_auto_thres",thres,"_true_vs_emase2.png")
+    #png(ofile_png, units="px", width=2000, height=2000, res=300)
+    par(mar=c(5,5,1,1)+0.1)
+    #par(mfrow=c(3,2))
+    colors = densCols(x=ase.auto$true.ase, y=ase.auto$emase2.ase,
+                  colramp=colorRampPalette(c("black","lightblue","green","red")))
+    plot(ase.auto$true.ase, ase.auto$emase2.ase, main=NULL,col=colors, xlab="True ASE",ylab="EMASE ASE",cex.axis = 1.4, cex.lab = 1.8,las=1)
+    abline(0, 1,col="red")
+    #dev.off()
+    #############################################
+    ofile_png = paste0(sampleIDs[id],"_auto_thres",thres,"_true_vs_rsem.png")
+    #png(ofile_png, units="px", width=2000, height=2000, res=300)
+    par(mar=c(5,5,1,1)+0.1)
+    colors = densCols(x=ase.auto$true.ase, y=ase.auto$rsem.ase, colramp=colorRampPalette(c("black","lightblue","green","red")))
+    plot(ase.auto$true.ase, ase.auto$rsem.ase, main=NULL,col=colors, xlab="True ASE",ylab="RSEM ASE",cex.axis = 1.4, cex.lab = 1.8,las=1)
+    abline(0, 1,col="red")
+    #dev.off()
+    #############################################
+    ofile_png = paste0(sampleIDs[id],"_auto_thres",thres,"_true_vs_kallisto.png")
+    #png(ofile_png, units="px", width=2000, height=2000, res=300)
+    par(mar=c(5,5,1,1)+0.1)
+    colors = densCols(x=ase.auto$true.ase,y=ase.auto$kallisto.ase,
+                      colramp=colorRampPalette(c("black","lightblue","green","red")))
+    plot(ase.auto$true.ase, ase.auto$kallisto.ase, main=NULL,
+         col=colors, xlab="True ASE",ylab="Kallisto ASE",cex.axis = 1.4, cex.lab = 1.8,las=1)
+    #mtext(side=3,line=0.5,text="my plot")
+    abline(0, 1,col="red")
+    #dev.off()
+    #############################################
+    ofile_png = paste0(sampleIDs[id],"_auto_thres",thres,"_true_vs_uniq.png")
+    #png(ofile_png, units="px", width=2000, height=2000, res=300)
+    par(mar=c(5,5,1,1)+0.1)
+    colors = densCols(x=ase.auto$true.ase, y=ase.auto$uniq.ase,
+                        colramp=colorRampPalette(c("black","lightblue","green","red")))
+    plot(ase.auto$true.ase, ase.auto$uniq.ase, main=NULL,col=colors,
+         xlab="True ASE",ylab="Unique Reads ASE", cex.axis = 1.4, cex.lab = 1.8,las=1)
+    abline(0, 1,col="red")
+    #dev.off()
+    #############################################
+    ofile_png = paste0(sampleIDs[id],"_auto_thres",thres,"_true_vs_wasp.png")
+    #png(ofile_png, units="px", width=2000, height=2000, res=300)
+    par(mar=c(4.5,5,1,1)+0.1)
+    colors = densCols(x=ase.auto$true.ase, y=ase.auto$wasp.ase,
+                      colramp=colorRampPalette(c("black","lightblue","green","red")))
+    plot(ase.auto$true.ase, ase.auto$wasp.ase, main=NULL,col=colors,
+         xlab="True ASE",ylab="WASP ASE",cex.axis = 1.4, cex.lab = 1.8,las=1)
+    abline(0, 1,col="red")
+    #dev.off()
+    ######################################################
+    #
+    ######################################################
+    ############################################
+    par(mfrow=c(2,2))
+    ofile_png = paste0(sampleIDs[id],"_auto_thres",thres,"_true_emase2_vs_true_emase4.png")
+    #png(ofile_png, units="px", width=2000, height=2000, res=300)
+    par(mar=c(5,5,1,1)+0.1)
+    #par(mfrow=c(3,2))
+    colors = densCols(x=ase.auto$true.ase-ase.auto$emase2.ase, y=ase.auto$true.ase-ase.auto$emase4.ase,
+                        colramp=colorRampPalette(c("black","lightblue","green","red")))
+    plot(ase.auto$true.ase-ase.auto$emase2.ase, ase.auto$true.ase-ase.auto$emase4.ase,
+                        main=NULL,col=colors, xlab="True - EMASE M2",ylab="True - EMASE M4",
+                        cex.axis = 1.4, cex.lab = 1.8,las=1,xlim=c(-0.6,0.6),ylim=c(-0.6,0.6))
+    abline(0, 1,col="red")
+    abline(v =0,col="red")
+    abline(h =0,col="red")
+    #dev.off()
+    #################
+    ofile_png = paste0(sampleIDs[id],"_auto_thres",thres,"_true_emase_vs_true_rsem.png")
+    #png(ofile_png, units="px", width=2000, height=2000, res=300)
+    par(mar=c(5,5,1,1)+0.1)
+    #par(mfrow=c(3,2))
+    colors = densCols(x=ase.auto$true.ase-ase.auto$emase2.ase,
+                      y=ase.auto$true.ase-ase.auto$rsem.ase,
+                      colramp=colorRampPalette(c("black","lightblue","green","red")))
+    plot(ase.auto$true.ase-ase.auto$emase2.ase, ase.auto$true.ase-ase.auto$rsem.ase,
+                        main=NULL,col=colors, xlab="True - EMASE",ylab="True - RSEM", 
+                        cex.axis = 1.4, 
+                        cex.lab = 1.8,las=1,xlim=c(-0.6,0.6),ylim=c(-0.6,0.6))
+    abline(0, 1,col="red")
+    abline(v =0,col="red")
+    abline(h =0,col="red")
+    #dev.off()
+    #################
+    ofile_png = paste0(sampleIDs[id],"_auto_thres",thres,"_true_emase_vs_true_kallisto.png")
+    #png(ofile_png, units="px", width=2000, height=2000, res=300)
+    par(mar=c(5,5,1,1)+0.1)
+    #par(mfrow=c(3,2))
+    colors = densCols(x=ase.auto$true.ase-ase.auto$emase2.ase,
+                      y=ase.auto$true.ase-ase.auto$kallisto.ase,
+                      colramp=colorRampPalette(c("black","lightblue","green","red")))
+    plot(ase.auto$true.ase-ase.auto$emase2.ase, ase.auto$true.ase-ase.auto$kallisto.ase,
+                        main=NULL,col=colors, xlab="True - EMASE",ylab="True - Kallisto",
+                        cex.axis = 1.4, cex.lab = 1.8,las=1,xlim=c(-0.5,0.5))
+    abline(0, 1,col="red")
+    abline(v =0,col="red")
+    abline(h =0,col="red")
+    #dev.off()
+    #################
+    ofile_png = paste0(sampleIDs[id],"_auto_thres",thres,"_true_emase_vs_true_uniq.png")
+    #png(ofile_png, units="px", width=2000, height=2000, res=300)
+    par(mar=c(5,5,1,1)+0.1)
+    #par(mfrow=c(3,2))
+    colors = densCols(x=ase.auto$true.ase-ase.auto$emase2.ase,
+                      y=ase.auto$true.ase-ase.auto$uniq.ase,
+                      colramp=colorRampPalette(c("black","lightblue","green","red")))
+    plot(ase.auto$true.ase-ase.auto$emase2.ase, ase.auto$true.ase-ase.auto$uniq.ase,
+                        main=NULL,col=colors, xlab="True - EMASE",ylab="True - Unique",
+                        cex.axis = 1.4, 
+                        cex.lab = 1.8,las=1,xlim=c(-0.5,0.5),ylim=c(-0.9,0.9))
+    abline(0, 1,col="red")
+    abline(v =0,col="red")
+    abline(h =0,col="red")
+    #dev.off()
+}
+
+```
